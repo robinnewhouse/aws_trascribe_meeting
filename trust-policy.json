@@ -1,0 +1,71 @@
+{
+  "Version":"2012-10-17",
+  "Statement":[
+    {
+      "Sid":"Transcribe",
+      "Effect":"Allow",
+      "Action":[
+        "transcribe:StartTranscriptionJob",
+        "transcribe:GetTranscriptionJob",
+        "transcribe:ListTranscriptionJobs",
+        "transcribe:DeleteTranscriptionJob"
+      ],
+      "Resource":"*"
+    },
+    {
+      "Sid":"ReadInput",
+      "Effect":"Allow",
+      "Action":["s3:GetObject"],
+      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse/audio-uploads/*"
+    },
+    {
+      "Sid":"WriteUploads",
+      "Effect":"Allow",
+      "Action":["s3:PutObject","s3:AbortMultipartUpload"],
+      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse/audio-uploads/*"
+    },
+    {
+      "Sid":"WriteTranscripts",
+      "Effect":"Allow",
+      "Action":["s3:PutObject","s3:AbortMultipartUpload"],
+      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse/transcriptions/*"
+    },
+    {
+      "Sid": "ReadTranscripts",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:HeadObject"
+      ],
+      "Resource": "arn:aws:s3:::transcription-app-robinnewhouse/transcriptions/*"
+    },    
+    {
+      "Sid":"ListNeeded",
+      "Effect":"Allow",
+      "Action":["s3:ListBucket","s3:GetBucketLocation"],
+      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse",
+      "Condition":{"StringLike":{"s3:prefix":[
+        "audio-uploads/*",
+        "transcriptions/*"
+      ]}}
+    },
+    {
+      "Sid": "BedrockInvoke",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockList",
+      "Effect": "Allow",
+      "Action": ["bedrock:ListFoundationModels"],
+      "Resource": "*"
+    }
+    
+    
+  ]
+}

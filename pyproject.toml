@@ -1,0 +1,97 @@
+[project]
+name = "meeting-transcription-app"
+version = "1.0.0"
+description = "AI-powered meeting transcription and analysis web application"
+authors = [
+    {name = "Meeting Transcription App", email = "admin@example.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+keywords = ["transcription", "ai", "aws", "gradio", "meetings"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "gradio>=5.47.0",
+    "boto3>=1.35.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0.0",
+    "flake8>=7.0.0", 
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/meeting-transcription-app"
+Repository = "https://github.com/your-username/meeting-transcription-app"
+Documentation = "https://github.com/your-username/meeting-transcription-app#readme"
+"Bug Tracker" = "https://github.com/your-username/meeting-transcription-app/issues"
+
+[project.scripts]
+meeting-app = "app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.uv]
+# UV-specific configuration
+dev-dependencies = [
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "pytest>=7.0.0", 
+    "pytest-cov>=4.0.0",
+]
+
+# Lock file configuration
+constraint-dependencies = [
+    # Pin specific versions if needed for stability
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "build",
+    "dist",
+]
