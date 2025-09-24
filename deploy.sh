@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 BUCKET_PREFIX="transcription-app"
-REGION="us-east-1"
+REGION=$(aws configure get region || echo "us-east-1")
 
 # Colors for output
 RED='\033[0;31m'
@@ -57,6 +57,12 @@ EOF
 
 echo -e "${GREEN}✅ .env file created${NC}"
 
+# Generate personalized trust policy
+echo -e "${YELLOW}📝 Generating personalized trust policy...${NC}"
+sed "s/YOUR_BUCKET_NAME/${BUCKET_NAME}/g" trust-policy.json > trust-policy-${BUCKET_NAME}.json
+
+echo -e "${GREEN}✅ Trust policy created: trust-policy-${BUCKET_NAME}.json${NC}"
+
 echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"
 echo ""
 echo -e "${YELLOW}📋 Next steps:${NC}"
@@ -70,5 +76,33 @@ echo "4. Run the application: python start.py (or python app.py)"
 echo ""
 echo -e "${YELLOW}📊 Resources created:${NC}"
 echo "- S3 Bucket: ${BUCKET_NAME}"
+echo "- Trust Policy: trust-policy-${BUCKET_NAME}.json"
+echo ""
+echo -e "${YELLOW}🔐 IAM Setup Options:${NC}"
+echo ""
+echo -e "${YELLOW}Option 1: Create dedicated IAM user (Recommended for production)${NC}"
+echo "aws iam create-user --user-name transcribe-app"
+echo "aws iam create-policy --policy-name TranscribeS3LeastPriv --policy-document file://trust-policy-${BUCKET_NAME}.json"
+echo "POLICY_ARN=\$(aws iam list-policies --query \"Policies[?PolicyName=='TranscribeS3LeastPriv'].Arn\" --output text)"
+echo "aws iam attach-user-policy --user-name transcribe-app --policy-arn \"\$POLICY_ARN\""
+echo "aws iam create-access-key --user-name transcribe-app"
+echo ""
+echo "Then add the access keys to your .env file:"
+echo "echo 'AWS_ACCESS_KEY_ID=AKIA...' >> .env"
+echo "echo 'AWS_SECRET_ACCESS_KEY=...' >> .env"
+echo ""
+echo "Or set environment variables directly:"
+echo "export AWS_ACCESS_KEY_ID=AKIA..."
+echo "export AWS_SECRET_ACCESS_KEY=..."
+echo "export AWS_REGION=${REGION}"
+echo ""
+echo -e "${YELLOW}Option 2: Use existing admin credentials (Fine for development)${NC}"
+echo "If you already have AWS credentials configured with admin access, you can use those."
+echo "Just make sure they have permissions for S3, Transcribe, and Bedrock."
+echo ""
+echo -e "${YELLOW}Option 3: Attach policy to existing user/role${NC}"
+echo "aws iam put-user-policy --user-name YOUR_USERNAME --policy-name TranscriptionAppPolicy --policy-document file://trust-policy-${BUCKET_NAME}.json"
+echo "OR for roles:"
+echo "aws iam put-role-policy --role-name YOUR_ROLE_NAME --policy-name TranscriptionAppPolicy --policy-document file://trust-policy-${BUCKET_NAME}.json"
 echo ""
 echo -e "${GREEN}🌐 Application will be available at: http://localhost:7860${NC}"

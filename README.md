@@ -37,7 +37,33 @@ uv sync
 
 ### 2. Configure AWS
 
-Set up your AWS credentials (if not already done):
+**Option A: Use Existing AWS Credentials (Recommended for Development)**
+If you already have AWS credentials configured on your machine:
+```bash
+aws configure
+```
+
+**Option B: Create Dedicated IAM User (Recommended for Production)**
+Create a dedicated IAM user for the transcription app:
+
+```bash
+# Create IAM user
+aws iam create-user --user-name transcribe-app
+
+# Create access key for the user
+aws iam create-access-key --user-name transcribe-app
+```
+
+The command will return access keys. Set them as environment variables:
+
+```bash
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+```
+
+**Option C: Use Admin Credentials (Quick Development Setup)**
+For quick development/testing, you can use your existing admin credentials:
 ```bash
 aws configure
 ```
@@ -49,22 +75,68 @@ aws configure
 ./deploy.sh
 ```
 
+This script will:
+- Create a unique S3 bucket for your account
+- Generate a personalized IAM trust policy
+- Create a `.env` file with your bucket configuration
+
 **Option B: Manual Setup**
 ```bash
-# Create S3 bucket
+# Create S3 bucket (replace with your preferred name)
 aws s3 mb s3://your-transcription-bucket --region us-east-1
+
+# Create .env file
+cat > .env << EOF
+AWS_REGION=us-east-1
+S3_BUCKET=your-transcription-bucket
+EOF
 ```
 
 ### 4. Set Up IAM Permissions
 
-Ensure your AWS credentials have access to:
-- **Amazon S3**: `s3:PutObject`, `s3:GetObject`
-- **Amazon Transcribe**: `transcribe:StartTranscriptionJob`, `transcribe:GetTranscriptionJob`, `transcribe:DeleteTranscriptionJob`
-- **Amazon Bedrock**: `bedrock:InvokeModel`
+**Option A: Create Dedicated IAM User (Recommended for Production)**
+After running `./deploy.sh`, create a dedicated IAM user with minimal permissions:
+
+```bash
+# Create IAM user
+aws iam create-user --user-name transcribe-app
+
+# Create policy from generated trust policy
+aws iam create-policy --policy-name TranscribeS3LeastPriv --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+
+# Get policy ARN and attach to user
+POLICY_ARN=$(aws iam list-policies --query "Policies[?PolicyName=='TranscribeS3LeastPriv'].Arn" --output text)
+aws iam attach-user-policy --user-name transcribe-app --policy-arn "$POLICY_ARN"
+
+# Create access keys
+aws iam create-access-key --user-name transcribe-app
+```
+
+Then set the environment variables with the returned access keys:
+```bash
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+```
+
+**Option B: Use Existing Admin Credentials (Fine for Development)**
+If you already have AWS credentials configured with admin access, you can use those directly. Just make sure they have permissions for S3, Transcribe, and Bedrock.
+
+**Option C: Attach Policy to Existing User/Role**
+```bash
+# For IAM users
+aws iam put-user-policy --user-name YOUR_USERNAME --policy-name TranscriptionAppPolicy --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+
+# For IAM roles
+aws iam put-role-policy --role-name YOUR_ROLE_NAME --policy-name TranscriptionAppPolicy --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+```
+
+**Template Trust Policy**
+The `trust-policy.json` file contains a template with `YOUR_BUCKET_NAME` placeholder. Replace this with your actual bucket name before applying to IAM.
 
 ### 5. Configure Environment Variables
 
-The `deploy.sh` script automatically creates a `.env` file, or you can create one manually:
+The `deploy.sh` script automatically creates a `.env` file with your bucket configuration, or you can create one manually:
 
 ```bash
 # Create .env file
@@ -74,11 +146,25 @@ S3_BUCKET=your-transcription-bucket
 EOF
 ```
 
-Or set environment variables directly:
+**If using dedicated IAM user (Option A above):**
+```bash
+# Add access keys to .env file
+cat >> .env << EOF
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+EOF
+```
 
+**If using existing admin credentials (Option B above):**
+Your existing AWS credentials will be used automatically. No additional environment variables needed.
+
+**Or set environment variables directly:**
 ```bash
 export AWS_REGION=us-east-1
 export S3_BUCKET=your-transcription-bucket
+# Only needed if using dedicated IAM user
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=...
 ```
 
 ### 6. Enable Bedrock Model Access
@@ -121,7 +207,8 @@ For production deployment, consider using:
 ├── pyproject.toml            # Python dependencies and project config
 ├── uv.lock                   # Dependency lockfile for reproducible builds
 ├── start.py                  # Quick start script with auto-setup
-├── deploy.sh                 # Simplified AWS setup script (S3 bucket only)
+├── deploy.sh                 # Automated AWS setup script (S3 bucket + IAM policy generation)
+├── trust-policy.json         # Template IAM trust policy with placeholder bucket name
 ├── README.md                 # This file
 └── .env                      # Environment variables (auto-created by deploy.sh)
 ```

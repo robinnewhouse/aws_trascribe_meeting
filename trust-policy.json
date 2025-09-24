@@ -16,19 +16,19 @@
       "Sid":"ReadInput",
       "Effect":"Allow",
       "Action":["s3:GetObject"],
-      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse/audio-uploads/*"
+      "Resource":"arn:aws:s3:::YOUR_BUCKET_NAME/audio-uploads/*"
     },
     {
       "Sid":"WriteUploads",
       "Effect":"Allow",
       "Action":["s3:PutObject","s3:AbortMultipartUpload"],
-      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse/audio-uploads/*"
+      "Resource":"arn:aws:s3:::YOUR_BUCKET_NAME/audio-uploads/*"
     },
     {
       "Sid":"WriteTranscripts",
       "Effect":"Allow",
       "Action":["s3:PutObject","s3:AbortMultipartUpload"],
-      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse/transcriptions/*"
+      "Resource":"arn:aws:s3:::YOUR_BUCKET_NAME/transcriptions/*"
     },
     {
       "Sid": "ReadTranscripts",
@@ -38,13 +38,13 @@
         "s3:GetObjectVersion",
         "s3:HeadObject"
       ],
-      "Resource": "arn:aws:s3:::transcription-app-robinnewhouse/transcriptions/*"
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/transcriptions/*"
     },    
     {
       "Sid":"ListNeeded",
       "Effect":"Allow",
       "Action":["s3:ListBucket","s3:GetBucketLocation"],
-      "Resource":"arn:aws:s3:::transcription-app-robinnewhouse",
+      "Resource":"arn:aws:s3:::YOUR_BUCKET_NAME",
       "Condition":{"StringLike":{"s3:prefix":[
         "audio-uploads/*",
         "transcriptions/*"
