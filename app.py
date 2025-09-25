@@ -34,6 +34,15 @@ def upload_to_s3(audio_file, filename):
     s3.upload_file(audio_file, S3_BUCKET, s3_key)
     return s3_key
 
+def upload_text_to_s3(content, base_filename, suffix):
+    """Upload text content to S3 with specified suffix"""
+    name_without_ext = os.path.splitext(base_filename)[0]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    s3_key = f"processed-outputs/{timestamp}_{name_without_ext}_{suffix}.txt"
+    
+    s3.put_object(Bucket=S3_BUCKET, Key=s3_key, Body=content)
+    return s3_key
+
 def start_transcription(s3_key, filename):
     """Start transcription job and return job name"""
     job_name = f"transcription-job-{uuid.uuid4().hex[:8]}-{int(time.time())}"
@@ -151,7 +160,11 @@ def process_audio(audio_file, instructions):
         yield "Generating AI analysis...", clean_transcript, ""
         ai_analysis = get_bedrock_analysis(clean_transcript, instructions)
         
-        yield "Complete!", clean_transcript, ai_analysis
+        yield "Uploading to S3...", clean_transcript, ai_analysis
+        upload_text_to_s3(clean_transcript, filename, "processed")
+        upload_text_to_s3(ai_analysis, filename, "summary")
+        
+        yield "Complete! All files saved to S3.", clean_transcript, ai_analysis
         
     except Exception as e:
         yield f"Error: {str(e)}", "", ""
