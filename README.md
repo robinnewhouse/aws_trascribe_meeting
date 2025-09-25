@@ -1,3 +1,14 @@
+---
+title: Meeting Transcription & AI Analysis
+emoji: 🎙️
+colorFrom: indigo
+colorTo: purple
+sdk: gradio
+sdk_version: "5.47.0"
+app_file: app.py
+pinned: false
+---
+
 # 🎙️ Meeting Transcription & AI Analysis App
 
 A streamlined web application that processes audio recordings through AWS services to provide clean transcripts and AI-powered meeting insights. **No Lambda functions required** - everything runs directly in the Gradio app!
