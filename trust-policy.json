@@ -39,6 +39,12 @@
         "s3:HeadObject"
       ],
       "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/transcriptions/*"
+    },
+    {
+      "Sid": "WriteProcessedOutputs",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/processed-outputs/*"
     },    
     {
       "Sid":"ListNeeded",
@@ -47,7 +53,8 @@
       "Resource":"arn:aws:s3:::YOUR_BUCKET_NAME",
       "Condition":{"StringLike":{"s3:prefix":[
         "audio-uploads/*",
-        "transcriptions/*"
+        "transcriptions/*",
+        "processed-outputs/*"
       ]}}
     },
     {

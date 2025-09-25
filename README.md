@@ -11,17 +11,17 @@ pinned: false
 
 # 🎙️ Meeting Transcription & AI Analysis App
 
-A streamlined web application that processes audio recordings through AWS services to provide clean transcripts and AI-powered meeting insights. **No Lambda functions required** - everything runs directly in the Gradio app!
+A streamlined web application that processes audio recordings through AWS services to provide clean transcripts and AI-powered meeting insights.
 
 ## 🚀 Features
 
 - **Audio Upload**: Simple drag-and-drop audio file upload
-- **Direct Transcription**: Uses Amazon Transcribe with speaker identification (no Lambda needed)
+- **Direct Transcription**: Uses Amazon Transcribe with speaker identification
 - **Clean Transcript**: Parses raw transcription data into readable conversation format
 - **AI Analysis**: Leverages Amazon Bedrock (Claude) for meeting summaries and insights
 - **Custom Instructions**: Tailor AI analysis based on your specific needs
 - **Lightning Fast Setup**: Uses uv package manager for 10-100x faster dependency installation
-- **Simplified Architecture**: Direct AWS service integration without serverless complexity
+- **Direct Integration**: Uses AWS services directly from the Gradio app
 
 ## 📋 Prerequisites
 
@@ -112,11 +112,11 @@ After running `./deploy.sh`, create a dedicated IAM user with minimal permission
 # Create IAM user
 aws iam create-user --user-name transcribe-app
 
-# Create policy from generated trust policy
-aws iam create-policy --policy-name TranscribeS3LeastPriv --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+# Create managed policy from generated trust policy
+aws iam create-policy --policy-name TranscribeAppPolicy --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
 
 # Get policy ARN and attach to user
-POLICY_ARN=$(aws iam list-policies --query "Policies[?PolicyName=='TranscribeS3LeastPriv'].Arn" --output text)
+POLICY_ARN=$(aws iam list-policies --query "Policies[?PolicyName=='TranscribeAppPolicy'].Arn" --output text)
 aws iam attach-user-policy --user-name transcribe-app --policy-arn "$POLICY_ARN"
 
 # Create access keys
@@ -135,11 +135,14 @@ If you already have AWS credentials configured with admin access, you can use th
 
 **Option C: Attach Policy to Existing User/Role**
 ```bash
-# For IAM users
-aws iam put-user-policy --user-name YOUR_USERNAME --policy-name TranscriptionAppPolicy --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+# Create managed policy first
+aws iam create-policy --policy-name TranscribeAppPolicy --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+POLICY_ARN=$(aws iam list-policies --query "Policies[?PolicyName=='TranscribeAppPolicy'].Arn" --output text)
 
-# For IAM roles
-aws iam put-role-policy --role-name YOUR_ROLE_NAME --policy-name TranscriptionAppPolicy --policy-document file://trust-policy-YOUR_BUCKET_NAME.json
+# Then attach to existing user or role
+aws iam attach-user-policy --user-name YOUR_USERNAME --policy-arn "$POLICY_ARN"
+# OR for roles:
+aws iam attach-role-policy --role-name YOUR_ROLE_NAME --policy-arn "$POLICY_ARN"
 ```
 
 **Template Trust Policy**
