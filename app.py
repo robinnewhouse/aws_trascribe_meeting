@@ -9,8 +9,21 @@ from datetime import datetime
 from parse_transcribe_output import function as parse_transcript
 
 load_dotenv(override=True)
+
+# For Hugging Face Spaces, check for HF secrets first, then fall back to .env
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 S3_BUCKET = os.getenv('S3_BUCKET', 'your-transcription-bucket')
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+
+# Configure AWS credentials if provided
+if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+    import boto3
+    boto3.setup_default_session(
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_REGION
+    )
 
 # AWS clients
 s3 = boto3.client('s3', region_name=AWS_REGION)
