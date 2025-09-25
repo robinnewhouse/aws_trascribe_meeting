@@ -20,6 +20,13 @@ bedrock = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 # File format mapping
 FORMATS = {'wav': 'wav', 'mp3': 'mp3', 'mp4': 'mp4', 'm4a': 'mp4', 'flac': 'flac', 'ogg': 'ogg', 'amr': 'amr', 'webm': 'webm'}
 
+app_theme = gr.themes.Soft(
+    primary_hue="indigo",
+    neutral_hue="gray",
+    spacing_size="lg",
+    font=["Inter", "sans-serif"]
+)
+
 def upload_to_s3(audio_file, filename):
     """Upload audio file to S3 and return the S3 key"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -114,6 +121,14 @@ Format with clear sections and headers."""
         print(f"DEBUG: Error message: {str(e)}")
         raise
 
+def create_download_file(content, filename):
+    """Create a temporary file for download"""
+    import tempfile
+    temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', prefix=filename+'_')
+    temp_file.write(content)
+    temp_file.close()
+    return temp_file.name
+
 def process_audio(audio_file, instructions):
     """Main function to process audio file through the entire pipeline"""
     if audio_file is None:
@@ -142,31 +157,67 @@ def process_audio(audio_file, instructions):
         yield f"Error: {str(e)}", "", ""
 
 # Create Gradio interface
-with gr.Blocks(title="Meeting Transcription & Analysis") as app:
-    gr.Markdown("# 🎙️ Meeting Transcription & AI Analysis")
-    
-    with gr.Row():
-        with gr.Column(scale=1):
-            audio_input = gr.Audio(label="Upload Audio", type="filepath")
-            instructions_input = gr.Textbox(
-                label="Analysis Instructions",
-                placeholder="Focus on action items and decisions made",
-                lines=3,
-                value="Provide a comprehensive summary focusing on key decisions, action items, and important insights."
-            )
-            submit_btn = gr.Button("🚀 Process Recording", variant="primary")
-        
-        with gr.Column(scale=2):
-            status_output = gr.Textbox(label="Status", interactive=False, lines=2)
-            
-            with gr.Row():
-                transcript_output = gr.Textbox(label="📝 Transcript", lines=15, interactive=False)
-                analysis_output = gr.Textbox(label="🧠 AI Analysis", lines=15, interactive=False)
-    
+with gr.Blocks(title="Meeting Transcription & Analysis", theme=app_theme) as demo:
+    gr.Markdown("## 🎙️ Meeting Transcription & AI Analysis")
+    gr.Markdown("Capture conversations, then review the transcript and AI summary without leaving this page.")
+
+    with gr.Column():
+        audio_input = gr.Audio(label="Upload Audio", type="filepath")
+
+        instructions_input = gr.Textbox(
+            label="Analysis Instructions",
+            placeholder="Highlight decisions, action items, and owners",
+            lines=3,
+            value="Provide a comprehensive summary focusing on key decisions, action items, and important insights."
+        )
+
+        submit_btn = gr.Button("🚀 Process Recording", variant="primary")
+
+        gr.Markdown("## Status")
+        status_output = gr.Markdown("")
+
+        gr.Markdown("## 📝 Transcript")
+        transcript_output = gr.Textbox(label="📝 Transcript", lines=16, interactive=False, show_label=False)
+        with gr.Row():
+            transcript_download = gr.DownloadButton(label="📥 Download Transcript", variant="secondary")
+            transcript_copy = gr.Button("📋 Copy to Clipboard", variant="secondary")
+
+        gr.Markdown("## 🧠 AI Analysis")
+        analysis_output = gr.Textbox(label="🧠 AI Analysis", lines=16, interactive=False, show_label=False)
+        with gr.Row():
+            analysis_download = gr.DownloadButton(label="📥 Download Analysis", variant="secondary")
+            analysis_copy = gr.Button("📋 Copy to Clipboard", variant="secondary")
+
     submit_btn.click(
         fn=process_audio,
         inputs=[audio_input, instructions_input],
         outputs=[status_output, transcript_output, analysis_output]
+    )
+    
+    # Download button handlers
+    transcript_download.click(
+        fn=lambda x: create_download_file(x, "transcript") if x else None,
+        inputs=[transcript_output],
+        outputs=[transcript_download]
+    )
+    
+    analysis_download.click(
+        fn=lambda x: create_download_file(x, "analysis") if x else None,
+        inputs=[analysis_output],
+        outputs=[analysis_download]
+    )
+    
+    # Copy button handlers (these will use browser clipboard API)
+    transcript_copy.click(
+        fn=None,
+        js="(text) => navigator.clipboard.writeText(text)",
+        inputs=[transcript_output]
+    )
+    
+    analysis_copy.click(
+        fn=None,
+        js="(text) => navigator.clipboard.writeText(text)",
+        inputs=[analysis_output]
     )
     
     gr.Markdown("""
@@ -177,4 +228,4 @@ with gr.Blocks(title="Meeting Transcription & Analysis") as app:
     """)
 
 if __name__ == "__main__":
-    app.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860)
