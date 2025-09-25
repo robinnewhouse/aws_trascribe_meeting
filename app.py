@@ -151,56 +151,68 @@ def create_download_file(content, filename):
     temp_file.close()
     return temp_file.name
 
+def format_status(message, status="processing"):
+    """Format status messages with simple styling"""
+    if status == "error":
+        return f"❌ {message}"
+    elif status == "complete":
+        return f"✅ {message}"
+    else:
+        return f"🔄 {message}"
+
 def process_audio(audio_file, instructions):
     """Main function to process audio file through the entire pipeline"""
     if audio_file is None:
-        return "Please upload an audio file.", "", ""
+        return format_status("Please upload an audio file first", "error"), "", ""
     
     try:
-        yield "Uploading audio to S3...", "", ""
+        yield format_status("Uploading audio file to S3..."), "", ""
         filename = os.path.basename(audio_file)
         s3_key = upload_to_s3(audio_file, filename)
         
-        yield "Starting transcription...", "", ""
+        yield format_status("Starting AWS Transcribe job..."), "", ""
         job_name = start_transcription(s3_key, filename)
         
-        yield f"Transcribing...", "", ""
+        yield format_status("Transcribing audio (this may take a few minutes)..."), "", ""
         raw_transcript = wait_for_transcription(job_name)
         
-        yield "Processing transcript...", "", ""
+        yield format_status("Processing and cleaning transcript..."), "", ""
         clean_transcript = parse_transcript(raw_transcript)
         
-        yield "Generating AI analysis...", clean_transcript, ""
+        yield format_status("Generating AI-powered analysis..."), clean_transcript, ""
         ai_analysis = get_bedrock_analysis(clean_transcript, instructions)
         
-        yield "Uploading to S3...", clean_transcript, ai_analysis
+        yield format_status("Saving results to S3..."), clean_transcript, ai_analysis
         upload_text_to_s3(clean_transcript, filename, "processed")
         upload_text_to_s3(ai_analysis, filename, "summary")
         
-        yield "Complete! All files saved to S3.", clean_transcript, ai_analysis
+        yield format_status("Processing complete! Results ready for download.", "complete"), clean_transcript, ai_analysis
         
     except Exception as e:
-        yield f"Error: {str(e)}", "", ""
+        yield format_status(f"Processing failed: {str(e)}", "error"), "", ""
 
 # Create Gradio interface
 with gr.Blocks(title="Meeting Transcription & Analysis", theme=app_theme) as demo:
     gr.Markdown("## 🎙️ Meeting Transcription & AI Analysis")
-    gr.Markdown("Capture conversations, then review the transcript and AI summary without leaving this page.")
-
+    gr.Markdown("Transform your meetings into actionable insights. Upload audio, get clean transcripts, and receive AI-powered summaries that highlight decisions, action items, and key takeaways.")
+    
     with gr.Column():
         audio_input = gr.Audio(label="Upload Audio", type="filepath")
 
         instructions_input = gr.Textbox(
             label="Analysis Instructions",
-            placeholder="Highlight decisions, action items, and owners",
+            placeholder="Focus on decisions, action items with owners, key insights, and next steps. Be specific about what you want to extract from the meeting.",
             lines=3,
-            value="Provide a comprehensive summary focusing on key decisions, action items, and important insights."
+            value="Analyze this meeting transcript and provide: 1) Key decisions made with context, 2) Action items with clear owners and deadlines, 3) Important insights or concerns raised, 4) Strategic implications, and 5) Specific next steps. Be concise but comprehensive."
         )
 
         submit_btn = gr.Button("🚀 Process Recording", variant="primary")
 
-        gr.Markdown("## Status")
-        status_output = gr.Markdown("")
+        with gr.Row():
+            with gr.Column(scale=1):
+                gr.Markdown("## 📊 Processing Status")
+            with gr.Column(scale=3):
+                status_output = gr.Markdown("")
 
         gr.Markdown("## 📝 Transcript")
         transcript_output = gr.Textbox(label="📝 Transcript", lines=16, interactive=False, show_label=False)
@@ -246,12 +258,17 @@ with gr.Blocks(title="Meeting Transcription & Analysis", theme=app_theme) as dem
         inputs=[analysis_output]
     )
     
-    gr.Markdown("""
-    ## Setup
-    1. AWS credentials configured
-    2. Environment variables: AWS_REGION, S3_BUCKET
-    3. Bedrock access enabled for OpenAI GPT models
-    """)
+    with gr.Row(elem_classes="center"):
+        gr.Markdown(
+            """<div style="text-align: center; margin-top: 20px;">
+            <a href="https://github.com/robinnewhouse/aws_trascribe_meeting" target="_blank" 
+               style="font-size: 18px; text-decoration: none; color: #6366f1; font-weight: 500;">
+            ⭐ View on GitHub
+            </a>
+            </div>""",
+            elem_classes="center"
+        )
+
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=7860)
