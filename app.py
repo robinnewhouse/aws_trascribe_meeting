@@ -146,8 +146,9 @@ Format with clear sections and headers."""
 def create_download_file(content, filename):
     """Create a temporary file for download"""
     import tempfile
+    
     temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', prefix=filename+'_')
-    temp_file.write(content)
+    temp_file.write(content or "")
     temp_file.close()
     return temp_file.name
 
@@ -162,113 +163,319 @@ def format_status(message, status="processing"):
 
 def process_audio(audio_file, instructions):
     """Main function to process audio file through the entire pipeline"""
-    if audio_file is None:
-        return format_status("Please upload an audio file first", "error"), "", ""
+    print(f"DEBUG: process_audio called with audio_file={audio_file}, instructions={instructions}")
     
+    if audio_file is None:
+        yield f"<span class='chip chip--error'>Please upload an audio file first</span>", "", "", ""
+        return
+
     try:
-        yield format_status("Uploading audio file to S3..."), "", ""
+        yield f"<span class='chip chip--processing'>Uploading audio file to S3...</span>", "Uploading audio file to S3...", "", ""
         filename = os.path.basename(audio_file)
+        
+        # Check if AWS credentials are configured
+        if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
+            raise Exception("AWS credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.")
+        
         s3_key = upload_to_s3(audio_file, filename)
-        
-        yield format_status("Starting AWS Transcribe job..."), "", ""
+
+        yield f"<span class='chip chip--processing'>Starting AWS Transcribe job...</span>", "Starting AWS Transcribe job...", "", ""
         job_name = start_transcription(s3_key, filename)
-        
-        yield format_status("Transcribing audio (this may take a few minutes)..."), "", ""
+
+        yield f"<span class='chip chip--processing'>Transcribing audio (this may take a few minutes)...</span>", "Transcribing audio (this may take a few minutes)...", "", ""
         raw_transcript = wait_for_transcription(job_name)
+
+        yield f"<span class='chip chip--processing'>Processing and cleaning transcript...</span>", "Processing and cleaning transcript...", "", ""
         
-        yield format_status("Processing and cleaning transcript..."), "", ""
+        # Get clean text for analysis and display
         clean_transcript = parse_transcript(raw_transcript)
-        
-        yield format_status("Generating AI-powered analysis..."), clean_transcript, ""
+
+        yield f"<span class='chip chip--processing'>Generating AI-powered analysis...</span>", "Generating AI-powered analysis...", clean_transcript, ""
         ai_analysis = get_bedrock_analysis(clean_transcript, instructions)
-        
-        yield format_status("Saving results to S3..."), clean_transcript, ai_analysis
+
+        yield f"<span class='chip chip--processing'>Saving results to S3...</span>", "Saving results to S3...", clean_transcript, ai_analysis
         upload_text_to_s3(clean_transcript, filename, "processed")
         upload_text_to_s3(ai_analysis, filename, "summary")
-        
-        yield format_status("Processing complete! Results ready for download.", "complete"), clean_transcript, ai_analysis
-        
+
+        yield f"<span class='chip chip--success'>Ready. Last run: {datetime.now().strftime('%H:%M:%S')}.</span>", "Processing complete! Results ready for download.", clean_transcript, ai_analysis
+
     except Exception as e:
-        yield format_status(f"Processing failed: {str(e)}", "error"), "", ""
+        error_msg = f"Processing failed: {str(e)}"
+        yield f"<span class='chip chip--error'>{error_msg}</span>", f"Error: {str(e)}", "", ""
+        return
+
+def safe_process_audio(audio_file, prompt):
+    """Safe wrapper for process_audio with error handling"""
+    print(f"DEBUG: safe_process_audio called with audio_file={audio_file}, prompt={prompt}")
+    
+    # First yield to show we're starting
+    yield f"<span class='chip chip--processing'>Starting processing...</span>", "Starting processing...", "", ""
+    
+    try:
+        for result in process_audio(audio_file, prompt):
+            yield result
+    except Exception as e:
+        error_msg = f"Processing failed: {str(e)}"
+        print(f"DEBUG: Exception in safe_process_audio: {e}")
+        yield f"<span class='chip chip--error'>{error_msg}</span>", f"Error: {str(e)}", "", ""
+
+# Default analysis prompt
+DEFAULT_PROMPT = "Analyze this meeting and provide key decisions, action items, and insights."
+
+# Session state for persistence
+session_state = gr.State({"prompt": DEFAULT_PROMPT})
 
 # Create Gradio interface
 with gr.Blocks(title="Meeting Transcription & Analysis", theme=app_theme) as demo:
-    gr.Markdown("## 🎙️ Meeting Transcription & AI Analysis")
-    gr.Markdown("Transform your meetings into actionable insights. Upload audio, get clean transcripts, and receive AI-powered summaries that highlight decisions, action items, and key takeaways.")
-    
-    with gr.Column():
-        audio_input = gr.Audio(label="Upload Audio", type="filepath")
 
-        instructions_input = gr.Textbox(
+
+    # Compact header
+    with gr.Row(equal_height=True):
+        gr.Markdown("### Meeting Transcription · AI Analysis")
+        with gr.Row(scale=0):
+            gr.Button("GitHub", link="https://github.com/robinnewhouse/aws_trascribe_meeting", size="sm")
+
+    # Empty state hint
+    empty_state = gr.Markdown("> 📎 Upload audio or record to begin.", visible=False)
+
+    # Audio upload with validation
+    with gr.Column():
+        audio = gr.Audio(
+            sources=["upload", "microphone"],
+            type="filepath",
+            label="Audio",
+            elem_id="audio_input"
+        )
+        gr.Markdown("**Supported**: mp3, wav, m4a · **Limit**: 120 min / 200 MB")
+
+    # Analysis prompt in collapsible accordion
+    with gr.Accordion("Analysis Prompt", open=False):
+        prompt = gr.Textbox(
+            lines=4,
+            value=DEFAULT_PROMPT,
+            placeholder="Enter analysis instructions...",
             label="Analysis Instructions",
-            placeholder="Focus on decisions, action items with owners, key insights, and next steps. Be specific about what you want to extract from the meeting.",
-            lines=3,
-            value="Analyze this meeting transcript and provide: 1) Key decisions made with context, 2) Action items with clear owners and deadlines, 3) Important insights or concerns raised, 4) Strategic implications, and 5) Specific next steps. Be concise but comprehensive."
+            elem_id="analysis_prompt"
         )
 
-        submit_btn = gr.Button("🚀 Process Recording", variant="primary")
-
-        with gr.Row():
-            with gr.Column(scale=1):
-                gr.Markdown("## 📊 Processing Status")
-            with gr.Column(scale=3):
-                status_output = gr.Markdown("")
-
-        gr.Markdown("## 📝 Transcript")
-        transcript_output = gr.Textbox(label="📝 Transcript", lines=16, interactive=False, show_label=False)
-        with gr.Row():
-            transcript_download = gr.DownloadButton(label="📥 Download Transcript", variant="secondary")
-            transcript_copy = gr.Button("📋 Copy to Clipboard", variant="secondary")
-
-        gr.Markdown("## 🧠 AI Analysis")
-        analysis_output = gr.Textbox(label="🧠 AI Analysis", lines=16, interactive=False, show_label=False)
-        with gr.Row():
-            analysis_download = gr.DownloadButton(label="📥 Download Analysis", variant="secondary")
-            analysis_copy = gr.Button("📋 Copy to Clipboard", variant="secondary")
-
-    submit_btn.click(
-        fn=process_audio,
-        inputs=[audio_input, instructions_input],
-        outputs=[status_output, transcript_output, analysis_output]
+    # Primary CTA button
+    run = gr.Button(
+        "⚡ Process",
+        variant="primary",
+        interactive=False,
+        elem_id="process_button"
     )
-    
-    # Download button handlers
-    transcript_download.click(
-        fn=lambda x: create_download_file(x, "transcript") if x else None,
-        inputs=[transcript_output],
-        outputs=[transcript_download]
+
+    # Status and logs
+    status = gr.HTML("<span class='chip chip--ready'>Ready</span>")
+    logs = gr.Code(
+        label="Logs",
+        visible=False,
+        elem_id="logs_output"
     )
-    
-    analysis_download.click(
-        fn=lambda x: create_download_file(x, "analysis") if x else None,
-        inputs=[analysis_output],
-        outputs=[analysis_download]
+
+    # Transcript output
+    gr.Markdown("### Transcript")
+    transcript = gr.Textbox(
+        label="Raw Transcript",
+        lines=16,
+        interactive=False,
+        show_label=False,
+        elem_id="transcript_output"
     )
-    
-    # Copy button handlers (these will use browser clipboard API)
+    with gr.Row():
+        transcript_copy = gr.Button("Copy", variant="secondary", elem_id="copy_transcript")
+        transcript_download = gr.DownloadButton("Download .txt", variant="secondary", elem_id="download_transcript")
+
+    # Analysis output
+    gr.Markdown("### Structured Summary")
+    analysis = gr.Textbox(
+        label="AI Analysis",
+        lines=12,
+        interactive=False,
+        show_label=False,
+        elem_id="analysis_output"
+    )
+    with gr.Row():
+        analysis_copy = gr.Button("Copy", variant="secondary", elem_id="copy_analysis")
+        analysis_download = gr.DownloadButton("Download .txt", variant="secondary", elem_id="download_analysis")
+
+    # Technical overview section
+    with gr.Accordion("🔧 How It Works - Technical Overview", open=False):
+        gr.Markdown("""
+        ### Architecture
+        
+        This application follows a straightforward pipeline architecture that processes audio files through AWS services:
+        
+        **Frontend (Gradio)** → **S3 Storage** → **AWS Transcribe** → **Transcript Parser** → **AWS Bedrock** → **Results Display**
+        
+        ### Processing Pipeline
+        
+        1. **Audio Upload & Storage**
+           - User uploads audio file through Gradio interface
+           - File is uploaded to designated S3 bucket with timestamped key (`audio-uploads/{timestamp}_{filename}`)
+           - Supports multiple formats: WAV, MP3, MP4/M4A, FLAC, OGG, AMR, WebM
+        
+        2. **Transcription Job**
+           - AWS Transcribe job is initiated with speaker identification enabled (`ShowSpeakerLabels: True`)
+           - Transcription output is automatically saved to S3 (`transcriptions/{job_name}.json`)
+           - Job polling mechanism checks status every 10 seconds with 10-minute timeout
+           - Completed jobs are automatically cleaned up to avoid resource accumulation
+        
+        3. **Transcript Processing**
+           - Raw JSON output from Transcribe contains word-level timestamps and speaker labels
+           - Custom parser (`parse_transcribe_output.py`) extracts speaker segments using regex pattern matching
+           - Groups consecutive words by speaker, handling punctuation attachment
+           - Outputs clean conversation format: `spk_0: Hello everyone...`
+        
+        4. **AI Analysis**
+           - Clean transcript is sent to AWS Bedrock (OpenAI GPT model)
+           - Configurable analysis prompt allows custom instruction injection
+           - Response formatted into structured sections: key points, decisions, action items, insights, next steps
+           - Uses OpenAI message format with temperature 0.7 for balanced creativity/consistency
+        
+        5. **Results Storage & Display**
+           - Both transcript and analysis are uploaded to S3 for persistence (`processed-outputs/`)
+           - Results displayed in Gradio interface with copy/download functionality
+           - Temporary files created for download feature with automatic cleanup
+        
+        ### Key Technical Decisions
+        
+        - **Direct AWS Integration**: Eliminates Lambda overhead by calling AWS services directly from Gradio app
+        - **Polling vs Webhooks**: Simple polling approach avoids complex webhook infrastructure setup
+        - **Speaker Grouping**: Custom parser groups consecutive speaker segments for natural conversation flow
+        - **Stateless Design**: Each processing request is independent with no session persistence required
+        - **Error Handling**: Comprehensive try/catch blocks with user-friendly error messages
+        
+        ### Security & Permissions
+        
+        The application requires minimal AWS permissions:
+        - S3: `GetObject`, `PutObject` for file storage
+        - Transcribe: `StartTranscriptionJob`, `GetTranscriptionJob`, `DeleteTranscriptionJob`
+        - Bedrock: `InvokeModel` for AI analysis
+        
+        Uses IAM policies with resource-specific restrictions to follow least-privilege principle.
+        """)
+
+    # Event handlers
+    def update_ui_on_audio_change(audio_file):
+        """Enable/disable run button based on audio presence"""
+        if audio_file:
+            return gr.update(value="<span class='chip chip--ready'>Ready</span>"), gr.update(visible=False), gr.update(interactive=True, variant="primary")
+        else:
+            return gr.update(value="<span class='chip chip--ready'>Ready</span>"), gr.update(visible=True), gr.update(interactive=False, variant="secondary")
+
+    audio.change(
+        fn=update_ui_on_audio_change,
+        inputs=[audio],
+        outputs=[status, empty_state, run]
+    )
+
+    run.click(
+        fn=safe_process_audio,
+        inputs=[audio, prompt],
+        outputs=[status, logs, transcript, analysis],
+        show_progress=True,
+        api_name="process"
+    )
+
+    # Copy and download handlers
     transcript_copy.click(
         fn=None,
         js="(text) => navigator.clipboard.writeText(text)",
-        inputs=[transcript_output]
+        inputs=[transcript]
     )
-    
+
+    transcript_download.click(
+        fn=lambda x: create_download_file(x, "transcript") if x else None,
+        inputs=[transcript],
+        outputs=[transcript_download]
+    )
+
     analysis_copy.click(
         fn=None,
         js="(text) => navigator.clipboard.writeText(text)",
-        inputs=[analysis_output]
+        inputs=[analysis]
     )
-    
-    with gr.Row(elem_classes="center"):
-        gr.Markdown(
-            """<div style="text-align: center; margin-top: 20px;">
-            <a href="https://github.com/robinnewhouse/aws_trascribe_meeting" target="_blank" 
-               style="font-size: 18px; text-decoration: none; color: #6366f1; font-weight: 500;">
-            ⭐ View on GitHub
-            </a>
-            </div>""",
-            elem_classes="center"
-        )
 
+    analysis_download.click(
+        fn=lambda x: create_download_file(x, "analysis") if x else None,
+        inputs=[analysis],
+        outputs=[analysis_download]
+    )
+
+    # Add keyboard navigation JavaScript
+    gr.Markdown("""
+    <script>
+    // Focus process button when audio is uploaded
+    document.addEventListener('DOMContentLoaded', function() {
+        const audioInput = document.getElementById('audio_input');
+        const processButton = document.getElementById('process_button');
+
+        if (audioInput) {
+            audioInput.addEventListener('change', function() {
+                if (this.files && this.files.length > 0) {
+                    setTimeout(() => processButton?.focus(), 100);
+                }
+            });
+        }
+
+        // ESC key to collapse accordions
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const accordions = document.querySelectorAll('details[open]');
+                accordions.forEach(acc => acc.removeAttribute('open'));
+            }
+        });
+    });
+    </script>
+    """)
 
 if __name__ == "__main__":
+    # Enable queue for processing (no concurrency_count parameter needed)
+    demo.queue()
+
+    # Add global CSS for centered layout and styling
+    gr.Markdown("""
+    <style>
+    .gradio-container{max-width:1100px;margin:auto;padding:20px}
+    :root { --radius-lg: 14px }
+    .chip{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:500;display:inline-block}
+    .chip--success{background:#d1fae5;color:#065f46;border:1px solid #a7f3d0}
+    .chip--error{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+    .chip--processing{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+    .chip--ready{background:#f0f9ff;color:#0c4a6e;border:1px solid #bae6fd}
+
+    /* Improve spacing and typography */
+    .gradio-container h3 { margin-top: 24px; margin-bottom: 12px; }
+    .gradio-container .block { margin-bottom: 16px; }
+
+    /* Better button spacing */
+    .gradio-container .gr-button { margin: 2px 4px; }
+
+    /* Improve accordion styling */
+    .gradio-container details { margin: 16px 0; }
+    .gradio-container details summary { cursor: pointer; padding: 8px 0; }
+
+    /* Dataframe styling */
+    .gradio-container table { font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace; }
+
+    /* Button states */
+    .gradio-container button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .gradio-container button:not(:disabled) {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .gradio-container button:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    </style>
+    """)
+
     demo.launch(server_name="0.0.0.0", server_port=7860)
