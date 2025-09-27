@@ -371,12 +371,22 @@ with gr.Blocks(title="Meeting Transcription & Analysis", theme=app_theme) as dem
         outputs=[status, empty_state, run]
     )
 
+    # Update download buttons when content is ready
+    def update_download_buttons(transcript_text, analysis_text):
+        transcript_file = create_download_file(transcript_text, "transcript") if transcript_text else None
+        analysis_file = create_download_file(analysis_text, "analysis") if analysis_text else None
+        return transcript_file, analysis_file
+
     run.click(
         fn=safe_process_audio,
         inputs=[audio, prompt],
         outputs=[status, logs, transcript, analysis],
         show_progress=True,
         api_name="process"
+    ).then(
+        fn=update_download_buttons,
+        inputs=[transcript, analysis], 
+        outputs=[transcript_download, analysis_download]
     )
 
     # Copy and download handlers
@@ -386,22 +396,10 @@ with gr.Blocks(title="Meeting Transcription & Analysis", theme=app_theme) as dem
         inputs=[transcript]
     )
 
-    transcript_download.click(
-        fn=lambda x: create_download_file(x, "transcript") if x else None,
-        inputs=[transcript],
-        outputs=[transcript_download]
-    )
-
     analysis_copy.click(
         fn=None,
         js="(text) => navigator.clipboard.writeText(text)",
         inputs=[analysis]
-    )
-
-    analysis_download.click(
-        fn=lambda x: create_download_file(x, "analysis") if x else None,
-        inputs=[analysis],
-        outputs=[analysis_download]
     )
 
     # Add keyboard navigation JavaScript
